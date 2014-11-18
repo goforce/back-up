@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
+	"github.com/goforce/log"
 	"net"
 	"net/smtp"
 )
@@ -10,6 +12,7 @@ type EMailConfig struct {
 	Server   string   `json:"server"`
 	User     string   `json:"user"`
 	Password string   `json:"password"`
+	From     string   `json:"from"`
 	To       []string `json:"to"`
 }
 
@@ -58,7 +61,7 @@ func (report *Report) Fatal(message string) {
 		body += "Subject: Fatal failure in salesforce.com backup\n\n"
 		body += fmt.Sprint("Backup failed to start: ", message, "\n")
 		auth := smtp.PlainAuth("", report.User, report.Password, report.host)
-		smtp.SendMail(report.Server, auth, "backup@mysalesforce.com", report.To, []byte(body))
+		smtp.SendMail(report.Server, auth, report.User, report.To, []byte(body))
 	}
 	panic(message)
 }
@@ -67,16 +70,43 @@ func (report *Report) Send() {
 	if len(report.To) > 0 {
 		body := "From: salesforce.com backup\n"
 		body += "To: you\n"
-		body += "Subject: Fatal failure in salesforce.com backup\n\n"
+		body += "Subject: salesforce.com backup completed\n\n"
 		body += fmt.Sprint("Backup finished with ", report.successes, " objects backed up and ", report.errors, " objects failed.\n")
 		body += "Detailed report below:\n"
 		for _, r := range report.rows {
 			body += r + "\n"
 		}
-		auth := smtp.PlainAuth("", report.User, report.Password, report.host)
-		err := smtp.SendMail(report.Server, auth, "backup@mysalesforce.com", report.To, []byte(body))
+		co, err := tls.Dial("tcp", report.Server, &tls.Config{
+			InsecureSkipVerify: true,
+			ServerName:         report.host,
+		})
 		if err != nil {
-			panic(fmt.Sprint("failed to send email:", err))
+			log.Panic(fmt.Println("failed to send email: ", err))
+		}
+		defer co.Close()
+		client, err := smtp.NewClient(co, report.host)
+		if err != nil {
+			log.Panic(fmt.Println("failed to send email: ", err))
+		}
+		defer client.Quit()
+		if err := client.Auth(smtp.PlainAuth("", report.User, report.Password, report.host)); err != nil {
+			log.Panic(fmt.Println("failed to send email: ", err))
+		}
+		if err := client.Mail(report.From); err != nil {
+			log.Panic(fmt.Println("failed to send email: ", err))
+		}
+		for _, to := range report.To {
+			if err := client.Rcpt(to); err != nil {
+				log.Panic(fmt.Println("failed to send email: ", err))
+			}
+		}
+		writer, err := client.Data()
+		if err != nil {
+			log.Panic(fmt.Println("failed to send email: ", err))
+		}
+		defer writer.Close()
+		if _, err = writer.Write([]byte(body)); err != nil {
+			log.Panic(fmt.Println("failed to send email: ", err))
 		}
 	} else {
 		fmt.Println("Total: ", report.successes, " objects copied, ", report.errors, " object failed")

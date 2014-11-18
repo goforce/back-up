@@ -68,6 +68,8 @@ func main() {
 		}
 	}
 
+	report.Send()
+
 }
 
 func ReadConfigFile(filename string) *Config {
