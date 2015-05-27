@@ -3,7 +3,8 @@ package main
 import (
 	"encoding/csv"
 	"fmt"
-	"github.com/goforce/api/commons"
+	"github.com/goforce/api/conv"
+	"github.com/goforce/api/soap"
 	"os"
 )
 
@@ -28,14 +29,18 @@ func NewWriter(path string, fields []string) *Writer {
 	return w
 }
 
-func (w *Writer) Write(rec commons.Record) {
+func (w *Writer) Write(rec soap.Record) {
+	var err error
 	row := make([]string, len(w.fields))
 	for i, name := range w.fields {
 		if value, ok := rec.Get(name); ok {
-			row[i] = commons.String(value)
+			row[i], err = conv.String(value)
+			if err != nil {
+				panic(fmt.Sprint("failed to convert value:", value, " for field:", name, " error:", err))
+			}
 		}
 	}
-	if err := w.writer.Write(row); err != nil {
+	if err = w.writer.Write(row); err != nil {
 		panic(fmt.Sprint("write to file failed:", err))
 	}
 }
