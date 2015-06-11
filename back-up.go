@@ -142,7 +142,7 @@ func main() {
 
 	for _, sObject := range globalDescribe.SObjects {
 		lcname := strings.ToLower(sObject.Name)
-		if sObject.Queryable && sObject.Createable && (len(includes) == 0 || includes[lcname]) && !excludes[lcname] && !restricted[lcname] {
+		if sObject.Queryable && (len(includes) == 0 || includes[lcname]) && !excludes[lcname] && !restricted[lcname] {
 			Backup(context, sObject.Name, since)
 		}
 	}
